@@ -67,6 +67,7 @@ cf_ai_learning_coach/
 ├── package.json
 ├── tsconfig.json
 ├── README.md
+├── prompts.md
 ```
 
 ## Running it
@@ -104,6 +105,20 @@ Open the URL. From the quick-action buttons or the chat box:
    context, it'll naturally reference what you've been working on.
 5. Change the session name in the top-right to something new. The
    whole dashboard goes empty. Switch back — it's all still there.
+
+## Known limitations
+
+The UI is deliberately minimal — I spent my time on the agent
+architecture and memory logic, not on design polish. The mobile
+layout in particular is basic (the sidebar collapses, but that's
+about it). A few things I'd tackle next:
+
+- Stream LLM responses token-by-token instead of waiting for the
+  full reply (would use `AIChatAgent` instead of plain `Agent`).
+- Tighter mobile layout.
+- Move the frontend to React with the SDK's `useAgent` hook, so
+  state pushes live from the server instead of refreshing after
+  each action.
 
 ## What I had to figure out
 
