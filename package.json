@@ -1,0 +1,23 @@
+{
+  "name": "cf_ai_learning_coach",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal Learning Coach — an AI-powered learning agent built on Cloudflare Workers AI, Durable Objects (via the Agents SDK), and Pages.",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "types": "wrangler types"
+  },
+  "dependencies": {
+    "agents": "^0.2.0",
+    "ai": "^6.0.168",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250321.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.0.0"
+  }
+}

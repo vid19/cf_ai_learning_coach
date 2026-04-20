@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Personal Learning Coach — cf_ai_learning_coach</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="logo">🎓</span>
+        <div>
+          <h1>Personal Learning Coach</h1>
+          <p class="subtitle">
+            AI-powered learning agent · Llama 3.3 · Cloudflare Workers AI
+          </p>
+        </div>
+      </div>
+      <div class="session">
+        <label for="session">Session</label>
+        <input id="session" type="text" placeholder="your-name" />
+        <button id="resetBtn" title="Wipe this session's memory">Reset</button>
+      </div>
+    </header>
+
+    <main>
+      <aside id="sidebar">
+        <section class="stats">
+          <div class="stat">
+            <span class="label">Streak</span>
+            <span id="streak" class="value">0</span>
+          </div>
+          <div class="stat">
+            <span class="label">Quizzes</span>
+            <span id="quizCount" class="value">0</span>
+          </div>
+          <div class="stat">
+            <span class="label">Last score</span>
+            <span id="lastScore" class="value">—</span>
+          </div>
+        </section>
+
+        <section>
+          <h2>Topics</h2>
+          <ul id="topics" class="topic-list">
+            <li class="empty">No topics yet. Ask me to teach you something!</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Weak spots</h2>
+          <ul id="weakSpots" class="weak-list">
+            <li class="empty">
+              None yet — they'll appear after you take a quiz.
+            </li>
+          </ul>
+        </section>
+      </aside>
+
+      <section id="chat">
+        <div id="messages"></div>
+        <div id="quizPanel" hidden></div>
+
+        <form id="composer">
+          <input
+            id="input"
+            type="text"
+            autocomplete="off"
+            placeholder="Ask anything, or try: 'teach me backpropagation' / 'quiz me on backpropagation'"
+          />
+          <button type="submit" id="sendBtn">Send</button>
+        </form>
+
+        <div class="quick-actions">
+          <button data-quick="teach me about big-O notation">
+            📖 Teach me big-O
+          </button>
+          <button data-quick="quiz me on big-O notation">
+            📝 Quiz me on big-O
+          </button>
+          <button data-quick="teach me about SQL indexes">
+            📖 Teach me SQL indexes
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

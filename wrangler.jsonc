@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-ai-learning-coach",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-03-21",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Static frontend (the chat UI) served directly by the Worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  // Workers AI binding — gives the agent access to Llama 3.3 (and any other model).
+  "ai": {
+    "binding": "AI"
+  },
+
+  // Durable Object that hosts each user's LearningCoach agent instance.
+  // Each unique session name => its own isolated DO instance with its own SQLite DB.
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LearningCoach",
+        "class_name": "LearningCoach"
+      }
+    ]
+  },
+
+  // Required for Agents SDK — each Agent uses SQLite-backed state.
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["LearningCoach"]
+    }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}
