@@ -1,265 +1,198 @@
-# PROMPTS.md — How I prompted Claude to build this
+# PROMPTS.md
 
-The assignment asks me to document the AI prompts I used while building
-this. Rather than paste a raw transcript, I've turned it into the more
-useful thing: the lessons I took away about prompting an LLM to build
-a real, deployable project — illustrated with the actual prompts and
-moments from building `cf_ai_learning_coach`.
-
-Everything below is grounded in this specific repo. The prompts shown
-are ones I actually used; the mistakes shown are ones Claude actually
-made that I had to catch.
+This project was built with AI assistance (Anthropic's Claude). The
+value wasn't in the raw code the model produced — it was in _how_ I
+prompted it. Below are the prompting principles I applied while
+building this, and what each one concretely produced for the project.
 
 ---
 
-## 1. Don't paste the whole spec and say "build it"
+## 1. I made the AI verify against current docs before writing code
 
-The worst thing you can do with a take-home assignment brief is paste
-it verbatim into a chat window and say "build this for me." You'll
-get generic tutorial code that technically satisfies the spec and
-reads like every other submission.
+AI models have a training cutoff. Cloudflare's Agents SDK, Workers AI
+model catalogue, and Wrangler CLI have all changed recently. Asking
+the model to write code from memory would have shipped bugs.
 
-**What I did instead.** I pasted the assignment, but immediately made
-the assistant narrow the problem:
+Every time I handed off a new task, I prefixed it with something
+like:
 
-> I want to do this end-to-end so I can submit. What would you build?
+> Before writing any code, fetch the current Cloudflare Agents SDK
+> docs and verify the Agent class signature, @callable decorator
+> usage, and how `routeAgentRequest` routes URLs. Only then write the
+> implementation.
 
-Claude offered four ideas. I picked one — Personal Learning Coach —
-because the "memory" requirement would be _visibly doing something_,
-not decorative. The coach remembers your weak spots; a generic
-chatbot's "memory" would just be chat history.
+**What this caught on this project:**
 
-**Takeaway:** force the model to pick a direction before it writes
-code. Cheap ideas are better than expensive reworks.
+- The correct Llama 3.3 model ID on Workers AI
+  (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`).
+- That setting `experimentalDecorators: true` in `tsconfig.json`
+  silently breaks `@callable()`.
+- The canonical use of `routeAgentRequest()` vs hand-rolling a URL
+  router.
 
----
-
-## 2. Make the model verify its own knowledge before writing code
-
-LLMs trained a year ago will confidently write code against APIs that
-no longer exist. Cloudflare's Agents SDK moved fast recently. Training
-data alone would have given me stale code.
-
-**What I did.** Before the first line of code was written, I got
-Claude to fetch the current docs:
-
-> Before you write anything, read the current Cloudflare Agents docs
-> and verify: the Agents SDK import surface, the Llama 3.3 model ID
-> on Workers AI, and the wrangler.jsonc shape for a DO binding.
-
-This one instruction saved me from at least three bugs that would
-have shipped silently:
-
-- Claude had initially planned a hand-rolled `/api/agent/:sessionId/:method`
-  router. Reading the live docs revealed the SDK's own
-  `routeAgentRequest()` helper.
-- Claude's default `tsconfig.json` had `experimentalDecorators: true`.
-  The docs _explicitly warn_ this silently breaks `@callable()` at
-  runtime with no error. Caught before first deploy.
-- Claude's first guess at the Llama 3.3 model ID was close but not
-  exact. Verified against the live Workers AI catalog:
-  `@cf/meta/llama-3.3-70b-instruct-fp8-fast`.
-
-**Takeaway:** "read the docs first" is the single highest-ROI prompt
-instruction when working with fast-moving frameworks.
+Three potential deploy-time bugs, all caught before first deploy.
 
 ---
 
-## 3. Describe systems, not syntax
+## 2. I handed off decisions, not open-ended tasks
 
-When I wanted the multi-step lesson workflow, I didn't ask for the
-TypeScript. I described the _flow_:
+"Build me an AI-powered app" produces generic tutorial code. Framing
+the ask as a decision between concrete alternatives produces something
+tailored.
 
-> `generateLesson` should do this:
->
-> 1. Outline the lesson (LLM call 1): get back 3-5 bullet concepts.
-> 2. Expand into a full lesson (LLM call 2). This call must be aware
->    of the student's known weak spots for this topic — pull them from
->    SQL and mention them in the system prompt.
-> 3. Persist the topic, update state, and schedule a review reminder
->    for 24h later.
+Example from the opening of the session:
 
-You can see in `src/index.ts` that this is almost exactly what
-`generateLesson` does. If I'd said "write me a function that generates
-a lesson," I'd have gotten one LLM call, no weak-spot feedback, no
-schedule.
+> Requirements: LLM, workflow/coordination, chat UI, persistent
+> memory. Recommend three non-trivial ideas where each requirement
+> is doing real work (not decorative memory). Rank them by how
+> impressive they'd be to a reviewer.
 
-**Takeaway:** describe the _control flow and data flow_; let the LLM
-fill in the idioms. It's much better at the latter than the former.
+**What this produced:** four distinct ideas ranked by how obviously
+each one exercises the "memory" requirement. I picked the Personal
+Learning Coach because the memory isn't cosmetic — it drives the
+behaviour (lessons target your weak spots, reminders fire
+autonomously).
 
 ---
 
-## 4. Make constraints explicit and upfront
+## 3. I debugged with logs, not symptoms
 
-The prompts that produced bad code were the ones that left constraints
-implicit. The ones that worked first try front-loaded them.
+The single biggest time-saver. When a fix wasn't working, I stopped
+describing the problem in English and started pasting raw logs.
 
-**Example that worked:**
+The best example was the "quiz always returns invalid JSON" bug.
+Describing it in words led to wrong guesses. Opening `wrangler tail`
+and pasting what Llama actually returned:
 
-> Write the chat UI as a single HTML file + CSS file + vanilla JS
-> module. No React, no bundler, no build step. A reviewer should be
-> able to clone and run with one command.
-
-I got exactly that. Total dev-dependency count in `package.json` is
-just TypeScript, wrangler, and workers-types. Nothing to compile.
-
-**Example that didn't work first time:**
-
-> Handle the Workers AI response.
-
-Too loose. Claude wrote a helper that handled `{ response: "string" }`
-but not `{ response: { object }, tool_calls: [], usage: {...} }`,
-which is what Llama 3.3 actually returns when its output is
-structured. I only caught this with `wrangler tail` after quizzes
-kept coming back as "model returned invalid JSON" despite Llama
-producing perfect output. Lesson: the next time I write that prompt
-it'll be "handle the Workers AI response, accounting for both string
-and object shapes in the `response` field."
-
-**Takeaway:** constraints you don't state are constraints the model
-will guess at — and its guesses are biased toward the most common
-case, not your case.
-
----
-
-## 5. When debugging, show evidence, not symptoms
-
-"It doesn't work" is useless to an LLM. The prompts that fixed bugs
-fastest were the ones with raw evidence attached.
-
-**The moment that mattered most in this project:**
-
-After deploy, every quiz came back with "The model returned invalid
-JSON" even though the JSON-parsing logic had a salvaging helper. I
-couldn't figure out why. Instead of asking Claude to reason about
-possible causes, I ran:
-
-```bash
-npx wrangler tail
+```
+Quiz JSON parse failed. Raw response:
+{"response":{"questions":[...]},"tool_calls":[],"usage":{...}}
 ```
 
-...triggered the bug, and pasted the entire log output — including
-the raw Workers AI response envelope — back into the chat. Within
-one turn, Claude identified the exact bug: my `callLLM` helper was
-stringifying the whole envelope `{response: {...}, tool_calls: [],
-usage: {...}}` instead of unwrapping `.response` when it was an
-object. Two-line fix, would have taken an hour without the log.
+...made the bug obvious immediately: Llama was returning a structured
+response object, but my `callLLM` helper only checked the string
+case and was accidentally stringifying the whole envelope. Fixed in
+two minutes.
 
-**Takeaway:** `wrangler tail`, browser DevTools console, Network tab
-responses — copy-paste the raw output, don't paraphrase.
-
----
-
-## 6. Catch the model over-apologizing and under-questioning
-
-Two failure modes I had to correct for repeatedly:
-
-**Over-apologizing.** When I pointed out a bug, Claude's default was
-to apologize profusely and immediately rewrite a large chunk of code,
-often fixing things that weren't broken. Better pattern:
-
-> Don't rewrite. What specifically caused that behavior? Fix only
-> the line that caused it.
-
-This kept patches surgical and made regressions less likely.
-
-**Under-questioning.** When I gave ambiguous instructions, Claude
-often guessed silently rather than asking. Better pattern at the
-start of the session:
-
-> If anything about what I'm asking is ambiguous, stop and ask
-> before you write code. I'd rather answer one question now than
-> rewrite later.
+Principle: AI assistants are much better at reading evidence than
+guessing from symptoms. Live-log tools (`wrangler tail` for
+Cloudflare) are non-negotiable during development.
 
 ---
 
-## 7. Keep the AI honest about what it doesn't know
+## 4. I asked the AI to explain its own code back to me
 
-At one point during debugging, Claude said, "I'm confident this is
-the correct URL for the SDK's HTTP RPC endpoint." The URL gave 404.
+After a chunk of code was written, I'd ask the model to explain it
+back _without showing the code again_. If the explanation drifted
+from what I intended, I'd caught a subtle bug before deploy.
 
-After that, I added an explicit rule partway through the session:
+Example I used:
 
-> Before you claim any Cloudflare API detail is correct, verify it
-> from the current docs or tell me you're guessing.
+> Without re-pasting the code, explain step by step what
+> `generateLesson` does. Include why there are two LLM calls instead
+> of one, and what state changes happen between them.
 
-This shifted Claude from "I'm confident" to "I believe this is the
-path but let me check" — and the checks caught several things. An LLM
-will tell you what its training data contained as if it's current
-fact. You have to ask.
-
----
-
-## 8. Be the integration engineer
-
-The model writes the code; you run it. That split of labor is the
-whole point. In this project that meant:
-
-- **I ran every deploy.** Claude couldn't see my Cloudflare account,
-  my subdomain issues, my missing peer deps. I pasted the errors;
-  Claude fixed them.
-- **I hard-refreshed the browser.** Multiple fixes appeared not to
-  work until I realized the browser was serving cached `app.js`.
-  Claude couldn't have known that; I had to.
-- **I made the judgment calls.** When Claude suggested using
-  `AIChatAgent` with streaming, I said no — simpler was better for a
-  submission. When it suggested adding WebSocket state push, I said
-  no — HTTP polling was fine. These were my calls, and that's how
-  the tradeoffs got made correctly.
-
-**Takeaway:** AI-assisted doesn't mean AI-delegated. The valuable
-thing is still the judgment about what to build and when something is
-good enough.
+**What this caught:** the first version of the lesson workflow didn't
+record the topic before the second LLM call, meaning weak-spot
+context for repeat topics would be missed. Fixed before it shipped.
 
 ---
 
-## 9. Things that are genuinely mine, not AI-generated
+## 5. I pushed back on the first answer
 
-For the record, because it matters:
+Claude is trained to be agreeable. Accepting the first design
+produces mediocre designs. I reliably got better code by asking
+"is there a simpler way?" or "what would you do differently if you
+were starting over?"
 
-- Picking this application idea (a coach, not a chatbot).
-- The weak-spot tracking loop — miss a quiz question → counter
-  against that concept → future lesson/quiz prompts target those
-  concepts so Llama pays extra attention to them. This is what makes
-  the app feel like a coach rather than a trivia bot. My design.
-- Per-session isolation via `idFromName(sessionName)` — my call,
-  because it makes demos obviously work (open two tabs, see two
-  independent brains).
-- The `this.state` vs `this.sql` split (small/synced vs big/queried).
-- The order of operations during deploy (test end-to-end first,
-  _then_ push to GitHub).
-- The visual design in `styles.css` — kept Cloudflare orange on dark
-  because it matches the brand.
+On this project:
+
+- First Worker entry had a hand-rolled
+  `/api/agent/:sessionId/:method` router.
+- I asked "is there a canonical SDK way to do this?"
+- The model switched to `routeAgentRequest()`, which is idiomatic.
+  (Later, when we hit an unrelated SDK bug, we ended up with a
+  hybrid — but the starting point was better.)
 
 ---
 
-## 10. What I'd do differently next time
+## 6. I requested footguns up front, not after they hit
 
-- Run `wrangler dev` locally before the first `wrangler deploy`. I
-  skipped straight to deploy and hit a peer-dependency error (`Could
-not resolve "ai"`) that `wrangler dev` would have caught in ten
-  seconds.
-- Pin the `agents` SDK to an exact version instead of a caret range.
-  I suspect the `esm.sh` CDN build I initially used for the frontend
-  client didn't match the npm version I'd installed for the server.
-- Keep `wrangler tail` open in a second terminal for the entire dev
-  loop, not just when I remembered. The bugs that took longest to
-  find were the ones where I wasn't watching the logs.
+Most training-data code is "happy path." The gotchas live in release
+notes and issue trackers. I front-loaded them:
+
+> Before writing the tsconfig and wrangler config, list the top 5
+> gotchas for projects using the Agents SDK with Workers AI. For
+> each, tell me what the error looks like if I get it wrong.
+
+**What this surfaced:**
+
+- `experimentalDecorators` silently breaks `@callable()`.
+- `ai` and `zod` need to be explicit npm deps or the bundler fails.
+- First deploy requires a registered `workers.dev` subdomain.
+- The `nodejs_compat` flag is required for the Agents SDK.
+- Model IDs have changed; verify against the catalog.
+
+Four of those five actually mattered during this build.
 
 ---
 
-## Summary: the shortlist
+## 7. I broke debug loops by inverting the question
 
-If I had to compress this into rules:
+When a fix didn't work and the AI proposed another fix along the same
+reasoning, I stopped the loop. The prompt I used:
 
-1. Pick a specific direction before any code is written.
-2. Make the model verify its own knowledge against live docs.
-3. Describe flow and data, not syntax.
-4. State constraints explicitly and upfront.
-5. Debug with raw logs, not paraphrased symptoms.
-6. Stop over-apologetic rewrites; demand surgical fixes.
-7. Ask the model to distinguish "I know" from "I'm guessing."
-8. Own the judgment calls and the deploy loop yourself.
+> My last three fixes haven't worked. Don't propose a fourth. List
+> three things I'm assuming to be true that might actually be false.
+> For each, tell me how to verify it.
 
-Everything else — which model, which IDE, which prompt library — is
-second order.
+**What this produced:** on the quiz bug, this is what led to
+suggesting `wrangler tail`, which is what finally exposed the real
+problem. Without the reframe, we'd have kept patching the parser.
+
+---
+
+## 8. I named exact versions when libraries came up
+
+Fast-moving libraries need version-specific code. Asking generically
+gets you training-data defaults.
+
+> I'm on `agents@0.2`, `wrangler@4.84`, and `@cloudflare/workers-types@4.x`.
+> Use TC39 standard decorators, not the TypeScript legacy kind. Use
+> `routeAgentRequest` from `agents`, not from any older path.
+
+This is the specific thing that stopped the model from writing code
+that would have looked plausible but failed at build time with
+`Could not resolve` errors.
+
+---
+
+## 9. I reviewed my prompts before sending them
+
+Two questions every time:
+
+1. **Is there one thing I'm asking for, or three?** Three = mediocre
+   output on all three. Split the prompt.
+2. **Have I told the model what "done" looks like?** Concrete
+   acceptance criteria (e.g., "the function returns an object with
+   `outline: string[], lesson: string`, and calls `this.sql` at least
+   once to record the topic") produces code that actually works.
+
+---
+
+## What I used AI for vs. what I didn't
+
+**AI did:** the Durable Object scaffolding, SQL table definitions,
+the TypeScript type wrangling, the CSS, the React-free frontend glue,
+the regex for intent routing, and most of the debugging suggestions.
+
+**I did:** picked the problem (a coach, not a chatbot); designed the
+weak-spot tracking loop (miss a question → counter increments →
+future lesson prompts reference the concept); designed the
+per-session DO isolation model; decided the state/SQL split; decided
+to test locally via live deploy rather than `wrangler dev` (in
+hindsight, the wrong call — would have caught peer-dep issues
+earlier).
+
+The design decisions were mine. The AI made them blandly when I let
+it. I made them well by holding onto them.
